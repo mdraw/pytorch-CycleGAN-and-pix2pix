@@ -151,12 +151,18 @@ class BaseModel(ABC):
                 save_filename = '%s_net_%s.pth' % (epoch, name)
                 save_path = os.path.join(self.save_dir, save_filename)
                 net = getattr(self, 'net' + name)
-
+                if isinstance(net, torch.nn.DataParallel):
+                    net = net.module
+                net.cpu()
+                torch.save(net.state_dict(), save_path)
+                # Additionally save ScriptModule versions of the generator networks for later deployment.
+                if 'G' in name:
+                    jitnet = torch.jit.script(net)
+                    torch.jit.save(jitnet, save_path[:-1] + 's')
+                # Move back to GPU if GPU is used
                 if len(self.gpu_ids) > 0 and torch.cuda.is_available():
-                    torch.save(net.module.cpu().state_dict(), save_path)
                     net.cuda(self.gpu_ids[0])
-                else:
-                    torch.save(net.cpu().state_dict(), save_path)
+
 
     def __patch_instance_norm_state_dict(self, state_dict, module, keys, i=0):
         """Fix InstanceNorm checkpoints incompatibility (prior to 0.4)"""
